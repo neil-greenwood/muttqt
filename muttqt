@@ -23,12 +23,12 @@ sqldateformat = '%Y-%m-%d %H:%M:%S'
 lbdbdateformat = '%Y-%m-%d %H:%M'
 
 class dataSource(object):
-    def __init__(self, cfg, getData = True):
+    def __init__(self, cfg, getData=True):
         self.cfg = cfg
         if getData:
             self.getData()
 
-    def printResults(self, numbered = False):
+    def printResults(self, numbered=False):
         """Print search results."""
         if numbered:
             # data = []
@@ -43,7 +43,7 @@ class dataSource(object):
             fstr = "%s\t%s\t%s"
         i = len(self.results)
         print("{0} matches:".format(i))
-        for i,s in enumerate(data):
+        for i, s in enumerate(data):
             out = fstr % s
             print out.encode('utf-8')
 
@@ -61,9 +61,9 @@ class dataSource(object):
         pass
 
 class aliasData(dataSource):
-    def __init__(self, cfg, datatype = 'alias', getData = True):
+    def __init__(self, cfg, datatype='alias', getData=True):
         self.datatype = datatype
-        super(aliasData, self).__init__(cfg, getData = getData)
+        super(aliasData, self).__init__(cfg, getData=getData)
 
     def getData(self):
         """Read data from mutt alias files."""
@@ -98,9 +98,9 @@ class aliasData(dataSource):
         self.data = data
 
 class sentTxtData(dataSource):
-    def __init__(self, cfg, datatype = 'senttxt', getData = True):
+    def __init__(self, cfg, datatype='senttxt', getData=True):
         self.datatype = datatype
-        super(sentTxtData, self).__init__(cfg, getData = getData)
+        super(sentTxtData, self).__init__(cfg, getData=getData)
 
     def getData(self):
         """Gets all data in the sent txt file.
@@ -109,7 +109,7 @@ class sentTxtData(dataSource):
         fn = self.cfg.get('sent', 'txtfile')
         tempdat = ingestLBDB(fn)
         data = []
-        for i,d in enumerate(tempdat):
+        for i, d in enumerate(tempdat):
             t = [str(i),]
             t.extend(d)
             data.append(tuple(t))
@@ -117,19 +117,19 @@ class sentTxtData(dataSource):
 
     def getAllSent(self):
         self.results = self.data
-        
+
     def datePruneSent(self, date):
         """Remove addresses from sent txt file prior to date.
 
         Date should be in YYYY-MM-DD format."""
         self.getAllSent()
         data = self.results
-        sorttmp = [(a[3], a, i) for i,a in enumerate(data)]
+        sorttmp = [(a[3], a, i) for i, a in enumerate(data)]
         sorttmp.sort()
         sorttmp.reverse()
         from dateutil.parser import parse
         d = parse(date)
-        for i,a in enumerate(sorttmp):
+        for i, a in enumerate(sorttmp):
             t = dt.datetime.strptime(a[0], sqldateformat)
             if d > t:
                 break
@@ -144,10 +144,10 @@ class sentTxtData(dataSource):
         rowids = [int(i) for i in rowids]
         self.getAllSent()
         data = self.results
-        pruned = [j for i,j in enumerate(data) if i not in rowids]
+        pruned = [j for i, j in enumerate(data) if i not in rowids]
         self.writeSent(pruned)
 
-    def writeSent(self, data, enc = 'utf-8'):
+    def writeSent(self, data, enc='utf-8'):
         """Write sent addresses to the txt file.
 
         This function looks for the number of columns in the data.  If there are 3,
@@ -201,15 +201,15 @@ class sentTxtData(dataSource):
         self.results = results
 
 class sentSQLData(dataSource):
-    def __init__(self, cfg, datatype = 'sentsql', getData = True):
+    def __init__(self, cfg, datatype='sentsql', getData=True):
         self.datatype = datatype
-        super(sentSQLData, self).__init__(cfg, getData = getData)
+        super(sentSQLData, self).__init__(cfg, getData=getData)
 
     def getData(self):
         self.getSQL()
         self.data = []
 
-    def getSQL(self, make = False):
+    def getSQL(self, make=False):
         """Connect to the sent mail SQL db file."""
         sqlfn = os.path.expanduser(self.cfg.get('sent', 'sqlfile'))
         if not make and not os.path.exists(sqlfn):
@@ -222,7 +222,7 @@ class sentSQLData(dataSource):
     def createTables(self):
         """Creates the default table in the SQL db."""
         try:
-            self.getSQL(make = True)
+            self.getSQL(make=True)
             c = self.c
         except:
             print "can't make sqlite db"
@@ -233,10 +233,10 @@ class sentSQLData(dataSource):
             tlist.append(table[0])
         if 'addresses' not in tlist:
             c.execute('create table addresses (email text, name text, '
-                'date text)')
+                      'date text)')
             # think about not having the unique index be keyed to name as well
             c.execute('create unique index "post_email" on addresses '
-                '(email, name)')
+                      '(email, name)')
 
     def getAllSent(self):
         """Gets all data in the sent SQL db.
@@ -248,13 +248,13 @@ class sentSQLData(dataSource):
             sys.exit(11)
         c = self.c
         c.execute('select rowid, email, name, date from addresses order '
-            'by email')
+                  'by email')
         sqlchildren = c.fetchall()
         # c.close()
         results = [s for s in sqlchildren]
         self.results = results
 
-    def searchData(self, query, sortby = 'name'):
+    def searchData(self, query, sortby='name'):
         """Query the sent address SQL db.
 
         Matches against name or email."""
@@ -267,14 +267,14 @@ class sentSQLData(dataSource):
         sortTerms = {
             'email': 'email',
             'name': 'name',
-            'date': 'date desc' }
+            'date': 'date desc', }
         s = sortTerms[sortby]
         # I don't know why I can't use parameter substitution for the order by
         # part.  I've made sure to ONLY accept email, name, or date as options
         # which should be secure.  Hopefully.
         q = "%%%s%%" % query.decode('utf-8')
         c.execute('select email, name, date from addresses where name like ? or '
-            'email like ? order by ' + s, (q,q))
+                  'email like ? order by ' + s, (q, q))
         sqlchildren = c.fetchall()
         c.close()
         results = []
@@ -332,11 +332,11 @@ class sentSQLData(dataSource):
         c.close()
 
 class extCommandData(dataSource):
-    def __init__(self, cfg, helper, datatype = 'extCommand',
-        getData = True):
-        
+    def __init__(self, cfg, helper, datatype='extCommand',
+                 getData=True):
+
         self.helper = helper
-        super(extCommandData, self).__init__(cfg, getData = getData)
+        super(extCommandData, self).__init__(cfg, getData=getData)
 
     def getData(self):
         c = self.cfg
@@ -352,7 +352,7 @@ class extCommandData(dataSource):
             # split the input and make it into a tuple of ints
             indices = tuple([int(i) for i in indices.split(',')])
         except:
-            indices = (0,1)
+            indices = (0, 1)
         try:
             ignoreFirst = c.getboolean(h, 'ignore_first')
             # split the input and make it into a tuple of ints
@@ -376,7 +376,7 @@ class extCommandData(dataSource):
         cmd = '%s %s' % (cmd, query)
         c = shlex.split(cmd)
         try:
-            proc = sp.Popen(c , stdout = sp.PIPE, stderr = sp.PIPE)
+            proc = sp.Popen(c, stdout=sp.PIPE, stderr=sp.PIPE)
         except:
             self.results = []
         stdout, stderr = proc.communicate()
@@ -496,7 +496,7 @@ def ingestEmail(lines):
 
     toAddr = email.utils.getaddresses(toAddr)
     data = []
-    for i,a in enumerate(toAddr):
+    for i, a in enumerate(toAddr):
         if a[0] == '':
             tmpName = a[1].split('@')[0]
             b = (a[1].lower(), tmpName, t)
@@ -506,7 +506,7 @@ def ingestEmail(lines):
 
     return data
 
-def ingestLBDB(fn, enc = 'utf-8'):
+def ingestLBDB(fn, enc='utf-8'):
     """Imports sent mail history from LBDB."""
     try:
         fn = os.path.expanduser(fn)
@@ -555,7 +555,7 @@ def searchDat(data, query):
             results.append(l)
     return results
 
-def printResults(results, numbered = False):
+def printResults(results, numbered=False):
     """Print search results."""
     i = len(results)
     print "%i matches:" % i
@@ -563,7 +563,7 @@ def printResults(results, numbered = False):
         fstr = "%s\t%s\t%s\t%s"
     else:
         fstr = "%s\t%s\t%s"
-    for i,s in enumerate(results):
+    for i, s in enumerate(results):
         out = fstr % s
         # print out
         # print unicode(out)
@@ -577,69 +577,69 @@ def main(argv=None):
         argv = sys.argv
 
     parser = argparse.ArgumentParser(
-        description = 'Scrape email addresses from emails.')
+        description='Scrape email addresses from emails.')
 
     parser.add_argument('-V', '--version',
-        action = "version",
-        version = "%(prog)s " + "{0} ({1})".format(__version__, __commit__),
-        help = 'prints version')
+                        action="version",
+                        version="%(prog)s {0} ({1})".format(__version__, __commit__),
+                        help='prints version')
 
     parser.add_argument('-f', '--fetch',
-        dest = 'fetch',
-        metavar = 'FETCH_FILE',
-        type = file,
-        const = sys.stdin,
-        nargs = '?',
-        help = ('fetch addressees from a file.  If no file is given, stdin is '
-            'used.'))
+                        dest='fetch',
+                        metavar='FETCH_FILE',
+                        type=file,
+                        const=sys.stdin,
+                        nargs='?',
+                        help=('fetch addressees from a file.  If no file '
+                              'is given, stdin is used.'))
 
-    parser.add_argument( '-q', '--query',
-        dest = 'query',
-        nargs = 1,
-        default = False,
-        help = 'query the database')
+    parser.add_argument('-q', '--query',
+                        dest='query',
+                        nargs=1,
+                        default=False,
+                        help='query the database')
 
-    parser.add_argument( '-s', '--sort',
-        dest = 'sortby',
-        nargs = 1,
-        default = None,
-        help = ("set the sort order of sent address results.  valid choices "
-            "are 'email', 'date', or 'name'"))
+    parser.add_argument('-s', '--sort',
+                        dest='sortby',
+                        nargs=1,
+                        default=None,
+                        help=("set the sort order of sent address results.  "
+                              "valid choices are 'email', 'date', or 'name'"))
 
     parser.add_argument('-i', '--import',
-        dest = 'import_file',
-        default = False,
-        help = 'import addresses from an LBDB m_inmail file')
+                        dest='import_file',
+                        default=False,
+                        help='import addresses from an LBDB m_inmail file')
 
     parser.add_argument('-d', '--dump',
-        dest = 'dump_file',
-        default = False,
-        help = 'dump sent addresses to an LBDB compatible file')
+                        dest='dump_file',
+                        default=False,
+                        help='dump sent addresses to an LBDB compatible file')
 
     parser.add_argument('--print-sent',
-        dest = 'print_sent',
-        action = 'store_true',
-        help = 'print sent history with sql rowids')
+                        dest='print_sent',
+                        action='store_true',
+                        help='print sent history with sql rowids')
 
     parser.add_argument('--remove-sent',
-        dest = 'remove_sent',
-        metavar = 'ROWID',
-        action = 'store',
-        nargs = '*',
-        default = False,
-        help = 'remove entries by rowid from the sent history')
+                        dest='remove_sent',
+                        metavar='ROWID',
+                        action='store',
+                        nargs='*',
+                        default=False,
+                        help='remove entries by rowid from the sent history')
 
     parser.add_argument('--date-prune',
-        dest = 'date_prune',
-        metavar = 'YYYY-MM-DD',
-        default = False,
-        help = 'prune all entries prior to YYYY-MM-DD')
+                        dest='date_prune',
+                        metavar='YYYY-MM-DD',
+                        default=False,
+                        help='prune all entries prior to YYYY-MM-DD')
 
     parser.add_argument('--write-config',
-        dest = 'write_config',
-        action = 'store_true',
-        default = False,
-        help = 'write out a default config file to ~/.muttqt/muttqt.conf')
+                        dest='write_config',
+                        action='store_true',
+                        default=False,
+                        help='write out a default config file to ~/.muttqt/muttqt.conf')
 
     args = parser.parse_args()
 
@@ -665,7 +665,7 @@ def main(argv=None):
 
     if args.print_sent:
         sentSource.getAllSent()
-        sentSource.printResults(numbered = True)
+        sentSource.printResults(numbered=True)
         return 0
 
     if args.write_config:
@@ -714,7 +714,7 @@ def main(argv=None):
                 aliasDat.searchData(query)
                 data = aliasDat.results
                 # data.insert(0,( 'alias','---','---' ))
-            elif helper in ['osx_abook','goobook',]:
+            elif helper in ['osx_abook', 'goobook',]:
                 extSource = extCommandData(cfg, helper)
                 extSource.searchData(query)
                 data = extSource.results
