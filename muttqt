@@ -335,6 +335,7 @@ class extCommandData(dataSource):
     def __init__(self, cfg, helper, datatype='extCommand',
                  getData=True):
 
+        self.datatype = datatype
         self.helper = helper
         super(extCommandData, self).__init__(cfg, getData=getData)
 
@@ -686,7 +687,7 @@ def main(argv=None):
         return 0
 
     # don't return a value for either import_file or fetch - these modify the
-    # data bbase and we will just write out the database after both of them.
+    # data base and we will just write out the database after both of them.
     if args.import_file:
         # data = ingestLBDB(args.import_file, 'latin-1')
         data = ingestLBDB(args.import_file)
