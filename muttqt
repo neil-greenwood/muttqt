@@ -22,7 +22,8 @@ CONFIGFILE = os.path.expanduser(CONFIGFILE)
 SQL_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 LBDB_DATE_FORMAT = '%Y-%m-%d %H:%M'
 
-class dataSource(object):
+class DataSource(object):
+    """Base class for different data sources."""
     def __init__(self, cfg, getData=True):
         self.cfg = cfg
         if getData:
@@ -60,10 +61,11 @@ class dataSource(object):
     def getData(self):
         pass
 
-class aliasData(dataSource):
+class AliasData(DataSource):
+    """Uses the aliases file to get addresses."""
     def __init__(self, cfg, datatype='alias', getData=True):
         self.datatype = datatype
-        super(aliasData, self).__init__(cfg, getData=getData)
+        super(AliasData, self).__init__(cfg, getData=getData)
 
     def getData(self):
         """Read data from mutt alias files."""
@@ -97,10 +99,11 @@ class aliasData(dataSource):
                         data.append((a[1], a[0], nick))
         self.data = data
 
-class sentTxtData(dataSource):
+class SentTxtData(DataSource):
+    """Uses the 'senttxt' file to get addresses."""
     def __init__(self, cfg, datatype='senttxt', getData=True):
         self.datatype = datatype
-        super(sentTxtData, self).__init__(cfg, getData=getData)
+        super(SentTxtData, self).__init__(cfg, getData=getData)
 
     def getData(self):
         """Gets all data in the sent txt file.
@@ -200,10 +203,11 @@ class sentTxtData(dataSource):
         results = [a[1] for a in sorttmp]
         self.results = results
 
-class sentSQLData(dataSource):
+class SentSqlData(DataSource):
+    """Uses a sqlite database as the source of addresses."""
     def __init__(self, cfg, datatype='sentsql', getData=True):
         self.datatype = datatype
-        super(sentSQLData, self).__init__(cfg, getData=getData)
+        super(SentSqlData, self).__init__(cfg, getData=getData)
 
     def getData(self):
         self.getSQL()
@@ -331,13 +335,13 @@ class sentSQLData(dataSource):
         sql.commit()
         c.close()
 
-class extCommandData(dataSource):
-    def __init__(self, cfg, helper, datatype='extCommand',
-                 getData=True):
+class ExtCommandData(DataSource):
+    """Uses an external command as the source of addresses."""
+    def __init__(self, cfg, helper, datatype='extCommand', getData=True):
 
         self.datatype = datatype
         self.helper = helper
-        super(extCommandData, self).__init__(cfg, getData=getData)
+        super(ExtCommandData, self).__init__(cfg, getData=getData)
 
     def getData(self):
         c = self.cfg
@@ -650,14 +654,14 @@ def main(argv=None):
     sentFileFormat = cfg.get('sent', 'format')
 
     if sentFileFormat == 'sql':
-        sentSource = sentSQLData(cfg)
+        sentSource = SentSqlData(cfg)
         # getAllSent = getAllSentSQL
         # datePruneSent = datePruneSentSQL
         # removeSent = removeSentSQL
         # writeSent = writeSentSQL
         # searchSent = searchSentSQL
     elif sentFileFormat == 'text':
-        sentSource = sentTxtData(cfg)
+        sentSource = SentTxtData(cfg)
         # getAllSent = getAllSentTxt
         # datePruneSent = datePruneSentTxt
         # removeSent = removeSentTxt
@@ -711,12 +715,12 @@ def main(argv=None):
         for helper in helpers:
             data = []
             if helper == 'mutt_alias':
-                aliasDat = aliasData(cfg)
+                aliasDat = AliasData(cfg)
                 aliasDat.searchData(query)
                 data = aliasDat.results
                 # data.insert(0,( 'alias','---','---' ))
             elif helper in ['osx_abook', 'goobook',]:
-                extSource = extCommandData(cfg, helper)
+                extSource = ExtCommandData(cfg, helper)
                 extSource.searchData(query)
                 data = extSource.results
                 # data.insert(0,( 'osx','---','---' ))
@@ -732,7 +736,7 @@ def main(argv=None):
                 # this is potentially risky, but we'll try to parse any other
                 # helpers in the config file as external commands
                 try:
-                    extSource = extCommandData(cfg, helper)
+                    extSource = ExtCommandData(cfg, helper)
                     extSource.searchData(query)
                     data = extSource.results
                 except:
