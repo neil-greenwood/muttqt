@@ -17,10 +17,10 @@ __version__ = "0.1.0"
 __commit__ = None
 
 # constants
-configfile = '~/.muttqt/muttqt.conf'
-configfile = os.path.expanduser(configfile)
-sqldateformat = '%Y-%m-%d %H:%M:%S'
-lbdbdateformat = '%Y-%m-%d %H:%M'
+CONFIGFILE = '~/.muttqt/muttqt.conf'
+CONFIGFILE = os.path.expanduser(CONFIGFILE)
+SQL_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+LBDB_DATE_FORMAT = '%Y-%m-%d %H:%M'
 
 class dataSource(object):
     def __init__(self, cfg, getData=True):
@@ -130,7 +130,7 @@ class sentTxtData(dataSource):
         from dateutil.parser import parse
         d = parse(date)
         for i, a in enumerate(sorttmp):
-            t = dt.datetime.strptime(a[0], sqldateformat)
+            t = dt.datetime.strptime(a[0], SQL_DATE_FORMAT)
             if d > t:
                 break
         sorttmp = sorttmp[:i]
@@ -170,8 +170,8 @@ class sentTxtData(dataSource):
         fn = os.path.expanduser(fn)
         lines = []
         for d in data:
-            t = dt.datetime.strptime(d[k+2], sqldateformat)
-            tmp = (d[k+0], d[k+1], t.strftime(lbdbdateformat))
+            t = dt.datetime.strptime(d[k+2], SQL_DATE_FORMAT)
+            tmp = (d[k+0], d[k+1], t.strftime(LBDB_DATE_FORMAT))
             line = '\t'.join(tmp) + '\n'
             lines.append(line)
         try:
@@ -279,7 +279,7 @@ class sentSQLData(dataSource):
         c.close()
         results = []
         for s in sqlchildren:
-            tmp = dt.datetime.strptime(s[-1], sqldateformat)
+            tmp = dt.datetime.strptime(s[-1], SQL_DATE_FORMAT)
             tmp = tmp.strftime(displaydateformat)
             # tmp += ' [sent]'
             result = (s[0], s[1], tmp)
@@ -443,18 +443,18 @@ def configDefaults():
 def configWrite(parser):
     """Writes out a default config file."""
     # write out a default config file if one doesn't exist already
-    print "attempting to make default config file at %s" % configfile
-    if not os.path.exists(os.path.dirname(configfile)):
+    print "attempting to make default config file at %s" % CONFIGFILE
+    if not os.path.exists(os.path.dirname(CONFIGFILE)):
         try:
             print "making directory"
-            os.makedirs(os.path.dirname(configfile))
+            os.makedirs(os.path.dirname(CONFIGFILE))
         except:
             print "failed making directory"
             sys.exit(10)
-    if not os.path.exists(configfile):
+    if not os.path.exists(CONFIGFILE):
         try:
             print "writing file"
-            o = open(configfile, 'w')
+            o = open(CONFIGFILE, 'w')
             parser.write(o)
             o.close()
         except:
@@ -469,7 +469,7 @@ def configRead():
     Also fetches the configuration defaults."""
     parser = configDefaults()
     try:
-        parser.read(os.path.expanduser(configfile))
+        parser.read(os.path.expanduser(CONFIGFILE))
     except:
         print "problem reading config file"
         sys.exit(10)
@@ -482,7 +482,7 @@ def ingestEmail(lines):
     msg = email.message_from_string(lines)
 
     now = dt.datetime.now()
-    t = now.strftime(sqldateformat)
+    t = now.strftime(SQL_DATE_FORMAT)
 
     toAddr = []
     for header in ['to', 'cc', 'bcc']:
@@ -521,8 +521,8 @@ def ingestLBDB(fn, enc='utf-8'):
     for line in lines:
         # print line.rstrip().split('\t')
         a, n, t = line.rstrip().split('\t')
-        t = dt.datetime.strptime(t, lbdbdateformat)
-        data.append((a.lower(), n, t.strftime(sqldateformat)))
+        t = dt.datetime.strptime(t, LBDB_DATE_FORMAT)
+        data.append((a.lower(), n, t.strftime(SQL_DATE_FORMAT)))
     return data
 
 def dumpFile(data, fn):
@@ -530,8 +530,8 @@ def dumpFile(data, fn):
     fn = os.path.expanduser(fn)
     lines = []
     for d in data:
-        t = dt.datetime.strptime(d[3], sqldateformat)
-        tmp = (d[1], d[2], t.strftime(lbdbdateformat))
+        t = dt.datetime.strptime(d[3], SQL_DATE_FORMAT)
+        tmp = (d[1], d[2], t.strftime(LBDB_DATE_FORMAT))
         line = '\t'.join(tmp) + '\n'
         lines.append(line)
     if os.path.exists(fn):
