@@ -4,13 +4,11 @@
 Stores sent addresses to a database and queries the database and other sources
 for email addresses."""
 import os, sys
-import fileinput
 import argparse
 import sqlite3
 import email
 import email.utils
 import datetime as dt
-from time import strftime
 import subprocess as sp
 import shlex
 from ConfigParser import ConfigParser
@@ -225,7 +223,6 @@ class sentSQLData(dataSource):
         """Creates the default table in the SQL db."""
         try:
             self.getSQL(make = True)
-            sql = self.sql
             c = self.c
         except:
             print "can't make sqlite db"
@@ -246,12 +243,10 @@ class sentSQLData(dataSource):
 
         Entries are prefixed by the rowid of the entry and are sorted
         alphabetically by email address."""
-        try:
-            sql = self.sql
-            c = self.c
-        except:
+        if not self.sql:
             print 'no sent sql db'
             sys.exit(11)
+        c = self.c
         c.execute('select rowid, email, name, date from addresses order '
             'by email')
         sqlchildren = c.fetchall()
@@ -263,12 +258,10 @@ class sentSQLData(dataSource):
         """Query the sent address SQL db.
 
         Matches against name or email."""
-        try:
-            sql = self.sql
-            c = self.c
-        except:
+        if not self.c:
             self.results = self.data = []
             return
+        c = self.c
         cfg = self.cfg
         displaydateformat = cfg.get('sent', 'date-format', raw=True)
         sortTerms = {
@@ -298,7 +291,6 @@ class sentSQLData(dataSource):
 
     def writeSent(self, data):
         """Write sent addresses to the SQL db."""
-        cfg = self.cfg
         try:
             sql = self.sql
             c = self.c
@@ -315,12 +307,11 @@ class sentSQLData(dataSource):
         """Remove addresses from sent SQL db prior to date.
 
         Date should be in YYYY-MM-DD format."""
-        try:
-            sql = self.sql
-            c = self.c
-        except:
+        if not self.sql:
             print 'no sent sql db'
             return
+        c = self.c
+        sql = self.sql
         q = "%s" % query.decode('utf-8')
         c.execute('delete from addresses where datetime(date) < ?', (q,))
         sql.commit()
@@ -330,12 +321,11 @@ class sentSQLData(dataSource):
         """Delete addresses from the SQL db.
 
         Addresses to be deleted are specified by rowid."""
-        try:
-            sql = self.sql
-            c = self.c
-        except:
+        if not self.sql:
             print 'no sent sql db'
             return
+        c = self.c
+        sql = self.sql
         for q in rowids:
             c.execute('delete from addresses where rowid = ?', (q,))
         sql.commit()
@@ -585,7 +575,6 @@ def main(argv=None):
     """Main function."""
     if argv is None:
         argv = sys.argv
-    programName = os.path.basename(argv[0])
 
     parser = argparse.ArgumentParser(
         description = 'Scrape email addresses from emails.')
