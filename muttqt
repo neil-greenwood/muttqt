@@ -26,10 +26,13 @@ class DataSource(object):
     """Base class for different data sources."""
     def __init__(self, cfg, getData=True):
         self.cfg = cfg
+        self.data = []
+        self.results = None
+        self.query = None
         if getData:
-            self.getData()
+            self.get_data()
 
-    def printResults(self, numbered=False):
+    def print_results(self, numbered=False):
         """Print search results."""
         if numbered:
             # data = []
@@ -38,27 +41,28 @@ class DataSource(object):
             #     t.extend(d[1:])
             #     data.append(tuple(t))
             data = [tuple(t) for t in self.results]
-            fstr = "%s\t%s\t%s\t%s"
+            format_str = "%s\t%s\t%s\t%s"
         else:
             data = self.results
-            fstr = "%s\t%s\t%s"
+            format_str = "%s\t%s\t%s"
         i = len(self.results)
         print("{0} matches:".format(i))
-        for i, s in enumerate(data):
-            out = fstr % s
+        for i, string in enumerate(data):
+            out = format_str % string
             print out.encode('utf-8')
 
-    def searchData(self, query):
+    def search_data(self, query, sortby=None):
         """Search list data for query."""
         results = []
         query = query.lower()
-        for l in self.data:
-            if l[0].lower().find(query) > -1 or l[1].lower().find(query) > -1:
-                results.append(l)
+        for line in self.data:
+            if line[0].lower().find(query) > -1 or line[1].lower().find(query) > -1:
+                results.append(line)
         self.query = query
         self.results = results
 
-    def getData(self):
+    def get_data(self):
+        """Get the data from the data source."""
         pass
 
 class AliasData(DataSource):
@@ -67,36 +71,36 @@ class AliasData(DataSource):
         self.datatype = datatype
         super(AliasData, self).__init__(cfg, getData=getData)
 
-    def getData(self):
+    def get_data(self):
         """Read data from mutt alias files."""
         files = self.cfg.get(self.datatype, 'files').split(',')
         files = [os.path.expanduser(f.strip()) for f in files]
         self.files = files
 
         data = []
-        for fn in files:
+        for filename in files:
             try:
-                f = open(fn)
-                lines = f.readlines()
-                f.close()
+                fin = open(filename)
+                lines = fin.readlines()
+                fin.close()
             except:
                 self.data = []
                 return
             for line in lines:
-                l = line.rstrip().split()
-                if l != [] and l[0] == 'alias':
-                    stuff = l[1:]
-                    nick = "%s [%s]" % (stuff[0], os.path.basename(fn))
+                line = line.rstrip().split()
+                if line != [] and line[0] == 'alias':
+                    stuff = line[1:]
+                    nick = "%s [%s]" % (stuff[0], os.path.basename(filename))
                     addy = " ".join(stuff[1:])
                     # some addresses seem to have escaped " - get rid of them
                     addy = addy.translate(None, '\\')
                     if addy.find(',') == -1:
-                        a = email.utils.parseaddr(addy)
+                        addr = email.utils.parseaddr(addy)
                         # If we don't have a name, let's take the first part of
                         # the email address and use that
-                        if a[0] == '':
-                            a = (a[1].split('@')[0], a[1])
-                        data.append((a[1], a[0], nick))
+                        if addr[0] == '':
+                            addr = (addr[1].split('@')[0], addr[1])
+                        data.append((addr[1], addr[0], nick))
         self.data = data
 
 class SentTxtData(DataSource):
@@ -105,56 +109,57 @@ class SentTxtData(DataSource):
         self.datatype = datatype
         super(SentTxtData, self).__init__(cfg, getData=getData)
 
-    def getData(self):
+    def get_data(self):
         """Gets all data in the sent txt file.
 
         This file has the same format as an LBDB database."""
-        fn = self.cfg.get('sent', 'txtfile')
-        tempdat = ingestLBDB(fn)
+        filename = self.cfg.get('sent', 'txtfile')
+        tempdat = ingest_LBDB(filename)
         data = []
-        for i, d in enumerate(tempdat):
-            t = [str(i),]
-            t.extend(d)
-            data.append(tuple(t))
+        for i, data in enumerate(tempdat):
+            lst = [str(i),]
+            lst.extend(data)
+            data.append(tuple(lst))
         self.data = data
 
-    def getAllSent(self):
+    def get_all_sent(self):
+        """Gets the data from the file without filtering."""
         self.results = self.data
 
-    def datePruneSent(self, date):
+    def prune_sent_before_date(self, date):
         """Remove addresses from sent txt file prior to date.
 
         Date should be in YYYY-MM-DD format."""
-        self.getAllSent()
+        self.get_all_sent()
         data = self.results
         sorttmp = [(a[3], a, i) for i, a in enumerate(data)]
         sorttmp.sort()
         sorttmp.reverse()
         from dateutil.parser import parse
-        d = parse(date)
-        for i, a in enumerate(sorttmp):
-            t = dt.datetime.strptime(a[0], SQL_DATE_FORMAT)
-            if d > t:
+        date = parse(date)
+        for i, alias in enumerate(sorttmp):
+            entry_date = dt.datetime.strptime(alias[0], SQL_DATE_FORMAT)
+            if date > entry_date:
                 break
         sorttmp = sorttmp[:i]
         results = [a[1] for a in sorttmp]
-        self.writeSent(results)
+        self.write_sent(results)
 
-    def removeSent(self, rowids):
+    def remove_sent(self, rowids):
         """Delete addresses from the SQL txt file.
 
         Addresses to be deleted are specified by rowid."""
         rowids = [int(i) for i in rowids]
-        self.getAllSent()
+        self.get_all_sent()
         data = self.results
         pruned = [j for i, j in enumerate(data) if i not in rowids]
-        self.writeSent(pruned)
+        self.write_sent(pruned)
 
-    def writeSent(self, data, enc='utf-8'):
+    def write_sent(self, data, enc='utf-8'):
         """Write sent addresses to the txt file.
 
         This function looks for the number of columns in the data.  If there are 3,
-        we assume that the data was scraped from an email using ingestEmail, so the
+        we assume that the data was scraped from an email using ingest_email, so the
         file is opened up in append mode and the data just added to the end.  If
         there are 4 columns, assume the data is either a full listing or a pruned
         listing, so open the file up in write mode and overwrite the existing
@@ -169,33 +174,32 @@ class SentTxtData(DataSource):
         elif len(data[0]) == 4:
             k = 1
             mode = 'w'
-        fn = self.cfg.get('sent', 'txtfile')
-        fn = os.path.expanduser(fn)
+        filename = self.cfg.get('sent', 'txtfile')
+        filename = os.path.expanduser(filename)
         lines = []
-        for d in data:
-            t = dt.datetime.strptime(d[k+2], SQL_DATE_FORMAT)
-            tmp = (d[k+0], d[k+1], t.strftime(LBDB_DATE_FORMAT))
+        for datum in data:
+            time = dt.datetime.strptime(datum[k+2], SQL_DATE_FORMAT)
+            tmp = (datum[k+0], datum[k+1], time.strftime(LBDB_DATE_FORMAT))
             line = '\t'.join(tmp) + '\n'
             lines.append(line)
         try:
             import codecs
-            f = codecs.open(fn, mode, enc)
-            # f = open(fn, mode)
-            f.writelines(lines)
-            f.close()
+            fout = codecs.open(filename, mode, enc)
+            fout.writelines(lines)
+            fout.close()
         except:
-            print "problem writing file %s" % fn
+            print "problem writing file %s" % filename
             sys.exit(13)
 
-    def searchData(self, query, sortby):
+    def search_data(self, query, sortby):
         """Query the sent address txt file.
 
         Matches against name or email."""
-        fn = self.cfg.get('sent', 'txtfile')
-        data = ingestLBDB(fn)
-        results = searchDat(data, query)
-        o = {'email':0, 'name':1, 'date':2}
-        i = o[sortby]
+        filename = self.cfg.get('sent', 'txtfile')
+        data = ingest_LBDB(filename)
+        results = self._filter_data_by_query(data, query)
+        field_index = {'email':0, 'name':1, 'date':2}
+        i = field_index[sortby]
         sorttmp = [(a[i], a) for a in results]
         sorttmp.sort()
         if sortby == 'date':
@@ -203,46 +207,53 @@ class SentTxtData(DataSource):
         results = [a[1] for a in sorttmp]
         self.results = results
 
+    def _filter_data_by_query(self, data, query):
+        """Search list data for query."""
+        query = query.lower()
+        results = [l for l in data
+                   if l[0].lower().find(query) > -1 or l[1].lower().find(query) > -1]
+        return results
+
 class SentSqlData(DataSource):
     """Uses a sqlite database as the source of addresses."""
     def __init__(self, cfg, datatype='sentsql', getData=True):
         self.datatype = datatype
+        self.sql = None
+        self.cursor = None
         super(SentSqlData, self).__init__(cfg, getData=getData)
 
-    def getData(self):
-        self.getSQL()
+    def get_data(self):
+        self._query_database()
         self.data = []
 
-    def getSQL(self, make=False):
+    def _query_database(self, make=False):
         """Connect to the sent mail SQL db file."""
-        sqlfn = os.path.expanduser(self.cfg.get('sent', 'sqlfile'))
-        if not make and not os.path.exists(sqlfn):
+        sqlfilename = os.path.expanduser(self.cfg.get('sent', 'sqlfile'))
+        if not make and not os.path.exists(sqlfilename):
             return
-        sql = sqlite3.connect(sqlfn)
-        c = sql.cursor()
+        sql = sqlite3.connect(sqlfilename)
         self.sql = sql
-        self.c = c
+        self.cursor = sql.cursor()
 
-    def createTables(self):
+    def _create_tables(self):
         """Creates the default table in the SQL db."""
         try:
-            self.getSQL(make=True)
-            c = self.c
+            self._query_database(make=True)
         except:
             print "can't make sqlite db"
             sys.exit(12)
-        tables = c.execute('select name from sqlite_master')
+        tables = self.cursor.execute('select name from sqlite_master')
         tlist = []
         for table in tables:
             tlist.append(table[0])
         if 'addresses' not in tlist:
-            c.execute('create table addresses (email text, name text, '
-                      'date text)')
+            self.cursor.execute('create table addresses (email text, name text, '
+                                'date text)')
             # think about not having the unique index be keyed to name as well
-            c.execute('create unique index "post_email" on addresses '
-                      '(email, name)')
+            self.cursor.execute('create unique index "post_email" on addresses '
+                                '(email, name)')
 
-    def getAllSent(self):
+    def get_all_sent(self):
         """Gets all data in the sent SQL db.
 
         Entries are prefixed by the rowid of the entry and are sorted
@@ -250,90 +261,82 @@ class SentSqlData(DataSource):
         if not self.sql:
             print 'no sent sql db'
             sys.exit(11)
-        c = self.c
-        c.execute('select rowid, email, name, date from addresses order '
-                  'by email')
-        sqlchildren = c.fetchall()
-        # c.close()
+        self.cursor.execute('select rowid, email, name, date from addresses order '
+                            'by email')
+        sqlchildren = self.cursor.fetchall()
+        # self.cursor.close()
         results = [s for s in sqlchildren]
         self.results = results
 
-    def searchData(self, query, sortby='name'):
+    def search_data(self, query, sortby='name'):
         """Query the sent address SQL db.
 
         Matches against name or email."""
-        if not self.c:
-            self.results = self.data = []
+        if not self.cursor:
             return
-        c = self.c
         cfg = self.cfg
         displaydateformat = cfg.get('sent', 'date-format', raw=True)
-        sortTerms = {
+        sort_terms = {
             'email': 'email',
             'name': 'name',
             'date': 'date desc', }
-        s = sortTerms[sortby]
         # I don't know why I can't use parameter substitution for the order by
         # part.  I've made sure to ONLY accept email, name, or date as options
         # which should be secure.  Hopefully.
-        q = "%%%s%%" % query.decode('utf-8')
-        c.execute('select email, name, date from addresses where name like ? or '
-                  'email like ? order by ' + s, (q, q))
-        sqlchildren = c.fetchall()
-        c.close()
+        querystr = "%%%s%%" % query.decode('utf-8')
+        self.cursor.execute('select email, name, date from addresses where '
+                            'name like ? or email like ? order by ' + sort_terms[sortby],
+                            (querystr, querystr))
+        sqlchildren = self.cursor.fetchall()
+        self.cursor.close()
         results = []
-        for s in sqlchildren:
-            tmp = dt.datetime.strptime(s[-1], SQL_DATE_FORMAT)
+        for row in sqlchildren:
+            tmp = dt.datetime.strptime(row[-1], SQL_DATE_FORMAT)
             tmp = tmp.strftime(displaydateformat)
             # tmp += ' [sent]'
-            result = (s[0], s[1], tmp)
+            result = (row[0], row[1], tmp)
             results.append(result)
         self.results = results
         # stick our results into data too, since SQL object doesn't have any
         # thing stored there until we do a search.
         self.data = results
 
-    def writeSent(self, data):
+    def write_sent(self, data):
         """Write sent addresses to the SQL db."""
-        try:
-            sql = self.sql
-            c = self.c
-        except:
-            self.createTables()
-            sql = self.sql
-            c = self.c
-        for d in data:
-            c.execute('insert or replace into addresses values (?, ?, ?)', d)
-        sql.commit()
-        c.close()
+        if not self.sql:
+            self._create_tables()
 
-    def datePruneSent(self, query):
+        for datum in data:
+            self.cursor.execute('insert or replace into addresses values'
+                                '(?, ?, ?)', datum)
+        self.sql.commit()
+        self.cursor.close()
+
+    def prune_sent_before_date(self, query):
         """Remove addresses from sent SQL db prior to date.
 
         Date should be in YYYY-MM-DD format."""
         if not self.sql:
             print 'no sent sql db'
             return
-        c = self.c
-        sql = self.sql
-        q = "%s" % query.decode('utf-8')
-        c.execute('delete from addresses where datetime(date) < ?', (q,))
-        sql.commit()
-        c.close()
+        querystr = "%s" % query.decode('utf-8')
+        self.cursor.execute('delete from addresses where datetime(date) < ?',
+                            (querystr,))
+        self.sql.commit()
+        self.cursor.close()
 
-    def removeSent(self, rowids):
+    def remove_sent(self, rowids):
         """Delete addresses from the SQL db.
 
         Addresses to be deleted are specified by rowid."""
         if not self.sql:
             print 'no sent sql db'
             return
-        c = self.c
-        sql = self.sql
-        for q in rowids:
-            c.execute('delete from addresses where rowid = ?', (q,))
-        sql.commit()
-        c.close()
+        for rowid in rowids:
+            self.cursor.execute('delete from addresses where rowid = ?',
+                                (rowid,))
+        self.sql.commit()
+        self.cursor.close()
 
 class ExtCommandData(DataSource):
     """Uses an external command as the source of addresses."""
@@ -343,67 +346,64 @@ class ExtCommandData(DataSource):
         self.helper = helper
         super(ExtCommandData, self).__init__(cfg, getData=getData)
 
-    def getData(self):
-        c = self.cfg
-        h = self.helper
-        cmd = c.get(h, 'cmd')
+    def get_data(self):
+        helper = self.helper
+        cmd = self.cfg.get(helper, 'cmd')
         try:
-            helperText = c.get(h, 'text')
+            helper_text = self.cfg.get(helper, 'text')
         except:
-            helperText = h
+            helper_text = helper
         # indices of returned output to keep
         try:
-            indices = c.get(h, 'cols')
+            indices = self.cfg.get(helper, 'cols')
             # split the input and make it into a tuple of ints
             indices = tuple([int(i) for i in indices.split(',')])
         except:
             indices = (0, 1)
         try:
-            ignoreFirst = c.getboolean(h, 'ignore_first')
-            # split the input and make it into a tuple of ints
+            ignore_first = self.cfg.getboolean(helper, 'ignore_first')
         except:
-            ignoreFirst = False
-        self.ignoreFirst = ignoreFirst
+            ignore_first = False
+        self.ignore_first = ignore_first
         self.indices = indices
         cmd = os.path.expanduser(cmd)
-        self.queryCmd = cmd
-        self.helperText = helperText
+        self.query_cmd = cmd
+        self.helper_text = helper_text
 
-    def searchData(self, query):
+    def search_data(self, query, sortby=None):
         """Search with an external command.
 
-        Depends on an the external program that returns data in the proper
+        Depends on the external program that returns data in the proper
         format.  The command is set up in the config file.  The proper format for
-        returned data is the same as the mutt query command expects except with out
+        returned data is the same as the mutt query command expects except without
         the header line."""
 
-        cmd = self.queryCmd
+        cmd = self.query_cmd
         cmd = '%s %s' % (cmd, query)
-        c = shlex.split(cmd)
+        cmd_ary = shlex.split(cmd)
         try:
-            proc = sp.Popen(c, stdout=sp.PIPE, stderr=sp.PIPE)
+            proc = sp.Popen(cmd_ary, stdout=sp.PIPE, stderr=sp.PIPE)
         except:
             self.results = []
-        stdout, stderr = proc.communicate()
+        stdout, _ = proc.communicate()
         if stdout:
-            helperText = '\t%s' % self.helperText
-            helperText = self.helperText
+            helper_text = '\t%s' % self.helper_text
             stdout = stdout.decode('utf-8')
             # split by line
             # results = stdout.rstrip().split('\n')
             results = stdout.split('\n')
-            if self.ignoreFirst:
+            if self.ignore_first:
                 results = results[1:]
             # split lines by tabs, removing any blank lines
             self.results = [list(r.split('\t')) for r in results if r != '']
-            self.processResults()
+            self._process_results()
             # fill in blanks
             self.results = [['-' if i == '' else i for i in r] for r in self.results]
-            self.results = [tuple(r + [helperText,]) for r in self.results]
+            self.results = [tuple(r + [helper_text,]) for r in self.results]
         else:
             self.results = []
 
-    def processResults(self):
+    def _process_results(self):
         """Process returned results.
 
         Simple method to process the results returned from the command.  This
@@ -412,7 +412,7 @@ class ExtCommandData(DataSource):
         # self.results = [r[:2] for r in self.results]
         self.results = [[r[i] for i in self.indices] for r in self.results]
 
-def configDefaults():
+def config_defaults():
     """Sets up config file defaults.
 
     These are used if a particular parameter can't be found in the config file,
@@ -445,7 +445,7 @@ def configDefaults():
     parser.set('mu', 'ignore_first', 'on')
     return parser
 
-def configWrite(parser):
+def config_write(parser):
     """Writes out a default config file."""
     # write out a default config file if one doesn't exist already
     print "attempting to make default config file at %s" % CONFIGFILE
@@ -459,20 +459,20 @@ def configWrite(parser):
     if not os.path.exists(CONFIGFILE):
         try:
             print "writing file"
-            o = open(CONFIGFILE, 'w')
-            parser.write(o)
-            o.close()
+            fout = open(CONFIGFILE, 'w')
+            parser.write(fout)
+            fout.close()
         except:
             print "failed writing file"
             sys.exit(10)
     else:
         print "config file already exists"
 
-def configRead():
+def config_read():
     """Reads the config file.
 
     Also fetches the configuration defaults."""
-    parser = configDefaults()
+    parser = config_defaults()
     try:
         parser.read(os.path.expanduser(CONFIGFILE))
     except:
@@ -480,107 +480,91 @@ def configRead():
         sys.exit(10)
     return parser
 
-def ingestEmail(lines):
+def ingest_email(lines):
     """Scrape email addresses from sent mails.
 
     Looks in the To:, CC:, and BCC: headers."""
     msg = email.message_from_string(lines)
 
     now = dt.datetime.now()
-    t = now.strftime(SQL_DATE_FORMAT)
+    time = now.strftime(SQL_DATE_FORMAT)
 
-    toAddr = []
+    to_addresses = []
     for header in ['to', 'cc', 'bcc']:
         if msg.has_key(header):
-            toAddr.extend(msg.get_all(header, []))
-    out = []
-    for a in toAddr:
-        b = a.decode('utf-8')
-        out.append(b)
-    toAddr = out
+            to_addresses.extend(msg.get_all(header, []))
+    to_addresses = [addr.decode('utf-8') for addr in to_addresses]
 
-    toAddr = email.utils.getaddresses(toAddr)
+    to_addresses = email.utils.getaddresses(to_addresses)
     data = []
-    for i, a in enumerate(toAddr):
-        if a[0] == '':
-            tmpName = a[1].split('@')[0]
-            b = (a[1].lower(), tmpName, t)
+    for _, addr in enumerate(to_addresses):
+        if addr[0] == '':
+            name = addr[1].split('@')[0]
+            entry = (addr[1].lower(), name, time)
         else:
-            b = (a[1].lower(), a[0], t)
-        data.append(b)
+            entry = (addr[1].lower(), addr[0], time)
+        data.append(entry)
 
     return data
 
-def ingestLBDB(fn, enc='utf-8'):
+def ingest_LBDB(filename, enc='utf-8'):
     """Imports sent mail history from LBDB."""
     try:
-        fn = os.path.expanduser(fn)
+        filename = os.path.expanduser(filename)
         import codecs
-        fin = codecs.open(fn, 'r', enc)
+        fin = codecs.open(filename, 'r', enc)
         lines = fin.readlines()
         fin.close()
     except:
-        print "problem opening file %s" % fn
+        print "problem opening file %s" % filename
         sys.exit(13)
     data = []
     for line in lines:
         # print line.rstrip().split('\t')
-        a, n, t = line.rstrip().split('\t')
-        t = dt.datetime.strptime(t, LBDB_DATE_FORMAT)
-        data.append((a.lower(), n, t.strftime(SQL_DATE_FORMAT)))
+        addr, name, time = line.rstrip().split('\t')
+        time = dt.datetime.strptime(time, LBDB_DATE_FORMAT)
+        data.append((addr.lower(), name, time.strftime(SQL_DATE_FORMAT)))
     return data
 
-def dumpFile(data, fn):
+def dump_file(data, filename):
     """Dump the slq file to an LBDB compatible text file."""
-    fn = os.path.expanduser(fn)
+    filename = os.path.expanduser(filename)
     lines = []
-    for d in data:
-        t = dt.datetime.strptime(d[3], SQL_DATE_FORMAT)
-        tmp = (d[1], d[2], t.strftime(LBDB_DATE_FORMAT))
+    for datum in data:
+        time = dt.datetime.strptime(datum[3], SQL_DATE_FORMAT)
+        tmp = (datum[1], datum[2], time.strftime(LBDB_DATE_FORMAT))
         line = '\t'.join(tmp) + '\n'
         lines.append(line)
-    if os.path.exists(fn):
-        print "output file %s already exists" % fn
+    if os.path.exists(filename):
+        print "output file %s already exists" % filename
         sys.exit(13)
     try:
         import codecs
-        f = codecs.open(fn, 'w', 'utf-8')
-        f.writelines(lines)
-        f.close()
+        fout = codecs.open(filename, 'w', 'utf-8')
+        fout.writelines(lines)
+        fout.close()
     except:
-        print "problem writing file %s" % fn
+        print "problem writing file %s" % filename
         sys.exit(13)
 
-def searchDat(data, query):
-    """Search list data for query."""
-    results = []
-    query = query.lower()
-    for l in data:
-        if l[0].lower().find(query) > -1 or l[1].lower().find(query) > -1:
-            results.append(l)
-    return results
-
-def printResults(results, numbered=False):
+def print_results(results, numbered=False):
     """Print search results."""
     i = len(results)
     print "%i matches:" % i
     if numbered:
-        fstr = "%s\t%s\t%s\t%s"
+        format_str = "%s\t%s\t%s\t%s"
     else:
-        fstr = "%s\t%s\t%s"
-    for i, s in enumerate(results):
-        out = fstr % s
+        format_str = "%s\t%s\t%s"
+    for i, string in enumerate(results):
+        out = format_str % string
         # print out
         # print unicode(out)
         # uout = out.decode('utf-8')
         print out.encode('utf-8')
         # print uout.encode('ascii', 'ignore')
 
-def main(argv=None):
-    """Main function."""
-    if argv is None:
-        argv = sys.argv
-
+def configure_argparser():
+    """Configures the parser of CLI arguments."""
     parser = argparse.ArgumentParser(
         description='Scrape email addresses from emails.')
 
@@ -646,105 +630,94 @@ def main(argv=None):
                         default=False,
                         help='write out a default config file to ~/.muttqt/muttqt.conf')
 
+    return parser
+
+def create_sent_source(cfg):
+    sent_file_format = cfg.get('sent', 'format')
+
+    if sent_file_format == 'sql':
+        sent_source = SentSqlData(cfg)
+    elif sent_file_format == 'text':
+        sent_source = SentTxtData(cfg)
+    else:
+        #error TODO
+        pass
+    return sent_source
+
+def main(argv=None):
+    """Main function."""
+    if argv is None:
+        argv = sys.argv
+
+    parser = configure_argparser()
     args = parser.parse_args()
 
     # get configuration data
-    cfg = configRead()
-
-    sentFileFormat = cfg.get('sent', 'format')
-
-    if sentFileFormat == 'sql':
-        sentSource = SentSqlData(cfg)
-        # getAllSent = getAllSentSQL
-        # datePruneSent = datePruneSentSQL
-        # removeSent = removeSentSQL
-        # writeSent = writeSentSQL
-        # searchSent = searchSentSQL
-    elif sentFileFormat == 'text':
-        sentSource = SentTxtData(cfg)
-        # getAllSent = getAllSentTxt
-        # datePruneSent = datePruneSentTxt
-        # removeSent = removeSentTxt
-        # writeSent = writeSentTxt
-        # searchSent = searchSentTxt
+    cfg = config_read()
+    sent_source = create_sent_source(cfg)
 
     if args.print_sent:
-        sentSource.getAllSent()
-        sentSource.printResults(numbered=True)
-        return 0
+        sent_source.get_all_sent()
+        sent_source.print_results(numbered=True)
 
-    if args.write_config:
-        configWrite(cfg)
-        return 0
+    elif args.write_config:
+        config_write(cfg)
 
-    if args.date_prune:
-        results = sentSource.datePruneSent(args.date_prune)
-        return 0
+    elif args.date_prune:
+        results = sent_source.prune_sent_before_date(args.date_prune)
 
-    if args.remove_sent:
-        results = sentSource.removeSent(args.remove_sent)
-        return 0
+    elif args.remove_sent:
+        results = sent_source.remove_sent(args.remove_sent)
 
-    if args.dump_file:
-        sentSource.getAllSent()
-        dumpFile(sentSource.results, args.dump_file)
-        return 0
+    elif args.dump_file:
+        sent_source.get_all_sent()
+        dump_file(sent_source.results, args.dump_file)
 
-    # don't return a value for either import_file or fetch - these modify the
-    # data base and we will just write out the database after both of them.
-    if args.import_file:
-        # data = ingestLBDB(args.import_file, 'latin-1')
-        data = ingestLBDB(args.import_file)
+    elif args.fetch or args.import_file:
+        if args.import_file:
+            data = ingest_LBDB(args.import_file)
+        else:
+            # read our lines from stdin or the file passed
+            lines = ''.join(args.fetch.readlines())
+            data = ingest_email(lines)
 
-    if args.fetch:
-        # read our lines from stdin or the file passed
-        lines = ''.join(args.fetch.readlines())
-        data = ingestEmail(lines)
+        sent_source.write_sent(data)
 
-    if args.fetch or args.import_file:
-        sentSource.writeSent(data)
-        return 0
-
-    if args.query:
-        helpers = cfg.get('global', 'helpers').split(',')
-        helpers = [h.strip() for h in helpers]
-        # helpers = ['mutt_alias', 'osx_abook', 'sent']
+    elif args.query:
+        helpers = [h.strip() for h in cfg.get('global', 'helpers').split(',')]
 
         results = []
         query = args.query[0]
         for helper in helpers:
             data = []
             if helper == 'mutt_alias':
-                aliasDat = AliasData(cfg)
-                aliasDat.searchData(query)
-                data = aliasDat.results
-                # data.insert(0,( 'alias','---','---' ))
+                aliasdata = AliasData(cfg)
+                aliasdata.search_data(query)
+                data = aliasdata.results
             elif helper in ['osx_abook', 'goobook',]:
-                extSource = ExtCommandData(cfg, helper)
-                extSource.searchData(query)
-                data = extSource.results
-                # data.insert(0,( 'osx','---','---' ))
-                # data = searchExtCommand(cfg, helper, query)
+                extern_source = ExtCommandData(cfg, helper)
+                extern_source.search_data(query)
+                data = extern_source.results
             elif helper == 'sent':
                 sortby = cfg.get('sent', 'sortby')
                 if args.sortby:
                     sortby = args.sortby[0]
-                sentSource.searchData(query, sortby)
-                data = sentSource.results
-                # data.insert(0,( 'sent','---','---' ))
+                sent_source.search_data(query, sortby)
+                data = sent_source.results
             else:
                 # this is potentially risky, but we'll try to parse any other
                 # helpers in the config file as external commands
                 try:
-                    extSource = ExtCommandData(cfg, helper)
-                    extSource.searchData(query)
-                    data = extSource.results
+                    extern_source = ExtCommandData(cfg, helper)
+                    extern_source.search_data(query)
+                    data = extern_source.results
                 except:
                     pass
             results.extend(data)
 
-        printResults(results)
-        return 0
+        print_results(results)
+
+    return 0
 
 if __name__ == "__main__":
     sys.exit(main())
